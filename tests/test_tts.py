@@ -56,6 +56,30 @@ def test_concat_and_export_full_audio(tmp_path):
     assert got >= total * 0.5
 
 
+def test_edge_without_ffmpeg_leaves_no_mp3_pair(tmp_path, monkeypatch):
+    import paper2youtube.tts as tts_mod
+
+    monkeypatch.setattr(tts_mod, "_ffmpeg_available", lambda: False)
+
+    class FakeComm:
+        def __init__(self, text, voice):
+            self.text = text
+
+        async def save(self, path):
+            Path(path).write_bytes(b"ID3fake")
+
+    import types
+
+    class FakeEdge(types.SimpleNamespace):
+        Communicate = FakeComm
+
+    monkeypatch.setitem(__import__("sys").modules, "edge_tts", FakeEdge())
+    out = tmp_path / "audio_01.wav"
+    ok = tts_mod.edge_tts_synth("hello", out, voice="x")
+    assert ok is False
+    assert not out.with_suffix(".mp3").exists()
+
+
 def test_concat_wavs(tmp_path):
     a = write_silent_wav(tmp_path / "a.wav", 1.0)
     b = write_silent_wav(tmp_path / "b.wav", 1.5)

@@ -1,6 +1,6 @@
 """paper2youtube: arXiv/PDF → notes + slides + per-figure audio + YouTube video."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from .config import Settings, load_settings
 from .pipeline import run_pipeline

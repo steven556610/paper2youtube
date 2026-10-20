@@ -78,214 +78,238 @@ def run_pipeline(
     slides: list[Path] = []
     chapters: list = []
 
+    def _fail_stage(name: str, exc: BaseException) -> None:
+        """Mark one stage failed without claiming it succeeded; stop the run."""
+        result.ok = False
+        result.errors.append(f"{name}: {exc}")
+        info = dict(manifest["stages"].get(name) or {})
+        info.update({"done": False, "error": str(exc), "at": _now()})
+        manifest["stages"][name] = info
+        manifest["failed_stage"] = name
+        manifest["last_error"] = {
+            "stage": name,
+            "error": str(exc),
+            "trace": traceback.format_exc()[-2000:],
+            "at": _now(),
+        }
+        _save_manifest(manifest_path, manifest)
+        say(f"      ERROR [{name}]: {exc}")
+
     try:
-        # ---- 1. ingest ----
-        if "ingest" in wanted:
-            say("[1/6] ingest — parse arXiv source / PDF")
-            if resume and manifest["stages"].get("ingest", {}).get("done") and (workdir / "source" / "paper.md").exists():
-                say("      skip (checkpoint)")
-            else:
-                # If input is already this workdir, re-ingest from local tree/pdf
-                src = input_ref
-                if Path(str(input_ref)).resolve() == workdir.resolve():
-                    local_pdf = list((workdir / "source").glob("*.pdf"))
-                    local_tree = workdir / "source" / "tree"
-                    if local_tree.is_dir():
-                        src = str(local_tree)
-                    elif local_pdf:
-                        src = str(local_pdf[0])
+        for stage_name in [s for s in STAGES if s in wanted]:
+            try:
+                # ---- 1. ingest ----
+                if stage_name == "ingest":
+                    say("[1/6] ingest — parse arXiv source / PDF")
+                    if resume and manifest["stages"].get("ingest", {}).get("done") and (workdir / "source" / "paper.md").exists():
+                        say("      skip (checkpoint)")
                     else:
-                        md = workdir / "source" / "paper.md"
-                        if md.exists():
-                            src = str(md)
-                bundle = ingest(src, workdir, timeout=settings.request_timeout)
-                manifest["stages"]["ingest"] = {
-                    "done": True,
-                    "source_kind": bundle.source_kind,
-                    "arxiv_id": bundle.arxiv_id,
-                    "title": bundle.title,
-                    "n_figures": len(bundle.figures),
-                    "at": _now(),
-                }
-                _save_manifest(manifest_path, manifest)
-            say(f"      figures: {manifest['stages']['ingest'].get('n_figures', 0)}")
+                        # If input is already this workdir, re-ingest from local tree/pdf
+                        src = input_ref
+                        if Path(str(input_ref)).resolve() == workdir.resolve():
+                            local_pdf = list((workdir / "source").glob("*.pdf"))
+                            local_tree = workdir / "source" / "tree"
+                            if local_tree.is_dir():
+                                src = str(local_tree)
+                            elif local_pdf:
+                                src = str(local_pdf[0])
+                            else:
+                                md = workdir / "source" / "paper.md"
+                                if md.exists():
+                                    src = str(md)
+                        bundle = ingest(src, workdir, timeout=settings.request_timeout)
+                        manifest["stages"]["ingest"] = {
+                            "done": True,
+                            "source_kind": bundle.source_kind,
+                            "arxiv_id": bundle.arxiv_id,
+                            "title": bundle.title,
+                            "n_figures": len(bundle.figures),
+                            "at": _now(),
+                        }
+                        _save_manifest(manifest_path, manifest)
+                    say(f"      figures: {manifest['stages']['ingest'].get('n_figures', 0)}")
 
-        # ---- 2. code check ----
-        if "code_check" in wanted:
-            say("[2/6] code_check — GitHub / HF paper API")
-            if resume and manifest["stages"].get("code_check", {}).get("done") and (workdir / "code_status.json").exists():
-                say("      skip (checkpoint)")
-                code_status = json.loads((workdir / "code_status.json").read_text(encoding="utf-8"))
-                from .code_checker import CodeStatus, RepoReport  # local restore
-                code_status = _code_status_from_dict(code_status)
-            else:
-                md = _read_markdown(workdir)
-                code_status = check_code(
-                    md,
-                    arxiv_id=manifest["stages"].get("ingest", {}).get("arxiv_id"),
-                    token=settings.github_token,
-                    timeout=min(settings.request_timeout, 30.0),
-                    inspect=not offline,
-                )
-                (workdir / "code_status.json").write_text(
-                    json.dumps(code_status.to_dict(), ensure_ascii=False, indent=2),
-                    encoding="utf-8",
-                )
-                (workdir / "code_status.md").write_text(code_status_to_md(code_status), encoding="utf-8")
-                manifest["stages"]["code_check"] = {
-                    "done": True,
-                    "summary": code_status.summary,
-                    "at": _now(),
-                }
-                _save_manifest(manifest_path, manifest)
-            say(f"      summary: {manifest['stages']['code_check'].get('summary')}")
+                # ---- 2. code check ----
+                elif stage_name == "code_check":
+                    say("[2/6] code_check — GitHub / HF paper API")
+                    if resume and manifest["stages"].get("code_check", {}).get("done") and (workdir / "code_status.json").exists():
+                        say("      skip (checkpoint)")
+                        code_status = _code_status_from_dict(
+                            json.loads((workdir / "code_status.json").read_text(encoding="utf-8"))
+                        )
+                    else:
+                        md = _read_markdown(workdir)
+                        code_status = check_code(
+                            md,
+                            arxiv_id=manifest["stages"].get("ingest", {}).get("arxiv_id"),
+                            token=settings.github_token,
+                            timeout=min(settings.request_timeout, 30.0),
+                            inspect=not offline,
+                        )
+                        (workdir / "code_status.json").write_text(
+                            json.dumps(code_status.to_dict(), ensure_ascii=False, indent=2),
+                            encoding="utf-8",
+                        )
+                        (workdir / "code_status.md").write_text(code_status_to_md(code_status), encoding="utf-8")
+                        manifest["stages"]["code_check"] = {
+                            "done": True,
+                            "summary": code_status.summary,
+                            "at": _now(),
+                        }
+                        _save_manifest(manifest_path, manifest)
+                    say(f"      summary: {manifest['stages']['code_check'].get('summary')}")
 
-        # ---- 3. script (notes + slides_plan.json) ----
-        if "script" in wanted:
-            say("[3/6] script — 5 fixed nodes + per-figure VLM pass")
-            plan_path = workdir / "slides_plan.json"
-            notes_path = workdir / "output_notes.md"
-            if resume and plan_path.exists() and notes_path.exists() and manifest["stages"].get("script", {}).get("done"):
-                say("      skip (checkpoint)")
-                from .script_builder import SlidesPlan
-                plan = SlidesPlan.from_json(plan_path)
-            else:
-                bundle = bundle or _reload_bundle(workdir)
-                code_status = code_status or _code_status_from_dict(
-                    json.loads((workdir / "code_status.json").read_text(encoding="utf-8"))
-                    if (workdir / "code_status.json").exists()
-                    else {}
-                )
-                plan = build_plan(
-                    bundle,
-                    code_status,
-                    llm,
-                    lang=settings.lang,
-                    max_figures=settings.max_figure_passes,
-                )
-                write_plan(plan, workdir)
-                manifest["stages"]["script"] = {
-                    "done": True,
-                    "n_items": len(plan.items),
-                    "at": _now(),
-                }
-                _save_manifest(manifest_path, manifest)
-            say(f"      items: {manifest['stages']['script'].get('n_items')}")
+                # ---- 3. script (notes + slides_plan.json) ----
+                elif stage_name == "script":
+                    say("[3/6] script — 5 fixed nodes + per-figure VLM pass")
+                    plan_path = workdir / "slides_plan.json"
+                    notes_path = workdir / "output_notes.md"
+                    if resume and plan_path.exists() and notes_path.exists() and manifest["stages"].get("script", {}).get("done"):
+                        say("      skip (checkpoint)")
+                        from .script_builder import SlidesPlan
+                        plan = SlidesPlan.from_json(plan_path)
+                    else:
+                        bundle = bundle or _reload_bundle(workdir)
+                        code_status = code_status or _code_status_from_dict(
+                            json.loads((workdir / "code_status.json").read_text(encoding="utf-8"))
+                            if (workdir / "code_status.json").exists()
+                            else {}
+                        )
+                        plan = build_plan(
+                            bundle,
+                            code_status,
+                            llm,
+                            lang=settings.lang,
+                            max_figures=settings.max_figure_passes,
+                        )
+                        write_plan(plan, workdir)
+                        manifest["stages"]["script"] = {
+                            "done": True,
+                            "n_items": len(plan.items),
+                            "at": _now(),
+                        }
+                        _save_manifest(manifest_path, manifest)
+                    say(f"      items: {manifest['stages']['script'].get('n_items')}")
 
-        # ---- 4. slides ----
-        if "slides" in wanted:
-            say("[4/6] slides — PPTX + PNG sequence")
-            plan = plan or _load_plan(workdir)
-            if resume and manifest["stages"].get("slides", {}).get("done") and (workdir / "output_slides.pptx").exists():
-                say("      skip (checkpoint)")
-                slides = sorted((workdir / "slides").glob("slide_*.png"))
-            else:
-                slides = render_slides(plan, workdir)
-                manifest["stages"]["slides"] = {
-                    "done": True,
-                    "n_slides": len(slides),
-                    "pptx": "output_slides.pptx",
-                    "at": _now(),
-                }
-                _save_manifest(manifest_path, manifest)
-            say(f"      slides: {len(slides)}")
+                # ---- 4. slides ----
+                elif stage_name == "slides":
+                    say("[4/6] slides — PPTX + PNG sequence")
+                    plan = plan or _load_plan(workdir)
+                    if resume and manifest["stages"].get("slides", {}).get("done") and (workdir / "output_slides.pptx").exists():
+                        say("      skip (checkpoint)")
+                        slides = sorted((workdir / "slides").glob("slide_*.png"))
+                    else:
+                        slides = render_slides(plan, workdir)
+                        manifest["stages"]["slides"] = {
+                            "done": True,
+                            "n_slides": len(slides),
+                            "pptx": "output_slides.pptx",
+                            "at": _now(),
+                        }
+                        _save_manifest(manifest_path, manifest)
+                    say(f"      slides: {len(slides)}")
 
-        # ---- 5. tts ----
-        if "tts" in wanted:
-            say("[5/6] tts — per-slide audio + full track")
-            plan = plan or _load_plan(workdir)
-            if resume and manifest["stages"].get("tts", {}).get("done") and (workdir / "audio").glob("audio_*.wav"):
-                existing = sorted((workdir / "audio").glob("audio_*.wav"))
-                if existing:
-                    say("      skip (checkpoint)")
-                    from .tts import AudioClip, wav_duration
-                    clips = [
-                        AudioClip(index=i + 1, path=p, duration_sec=wav_duration(p), text="")
-                        for i, p in enumerate(existing)
-                    ]
-            if not clips:
-                clips = synthesize_plan(
-                    plan,
-                    workdir,
-                    voice=settings.tts_voice,
-                    backend=settings.tts_backend if not offline else "silent",
-                )
-                full = export_full_audio(clips, workdir)
-                manifest["stages"]["tts"] = {
-                    "done": True,
-                    "n_clips": len(clips),
-                    "full_audio": full.name,
-                    "at": _now(),
-                }
-                _save_manifest(manifest_path, manifest)
-            say(f"      clips: {len(clips)}")
+                # ---- 5. tts ----
+                elif stage_name == "tts":
+                    say("[5/6] tts — per-slide audio + full track")
+                    plan = plan or _load_plan(workdir)
+                    if resume and manifest["stages"].get("tts", {}).get("done") and any((workdir / "audio").glob("audio_*.wav")):
+                        existing = sorted((workdir / "audio").glob("audio_*.wav"))
+                        say("      skip (checkpoint)")
+                        from .tts import AudioClip, wav_duration
+                        clips = [
+                            AudioClip(index=i + 1, path=p, duration_sec=wav_duration(p), text="")
+                            for i, p in enumerate(existing)
+                        ]
+                    if not clips:
+                        clips = synthesize_plan(
+                            plan,
+                            workdir,
+                            voice=settings.tts_voice,
+                            backend=settings.tts_backend if not offline else "silent",
+                        )
+                        full = export_full_audio(clips, workdir)
+                        manifest["stages"]["tts"] = {
+                            "done": True,
+                            "n_clips": len(clips),
+                            "full_audio": full.name,
+                            "at": _now(),
+                        }
+                        _save_manifest(manifest_path, manifest)
+                    say(f"      clips: {len(clips)}")
 
-        # ---- 6. video + chapters ----
-        if "video" in wanted:
-            say("[6/6] video — bind slide duration = audio duration")
-            plan = plan or _load_plan(workdir)
-            if not slides:
-                slides = sorted((workdir / "slides").glob("slide_*.png"))
-            if not clips:
-                from .tts import AudioClip, wav_duration
-                existing = sorted((workdir / "audio").glob("audio_*.wav"))
-                clips = [
-                    AudioClip(index=i + 1, path=p, duration_sec=wav_duration(p), text="")
-                    for i, p in enumerate(existing)
-                ]
-            chapters = build_chapters(plan, clips)
-            desc = format_youtube_description(plan, chapters)
-            write_chapters(chapters, workdir / "chapters.txt", description=desc)
-            (workdir / "youtube_description.txt").write_text(desc, encoding="utf-8")
+                # ---- 6. video + chapters ----
+                elif stage_name == "video":
+                    say("[6/6] video — bind slide duration = audio duration")
+                    plan = plan or _load_plan(workdir)
+                    if not slides:
+                        slides = sorted((workdir / "slides").glob("slide_*.png"))
+                    if not clips:
+                        from .tts import AudioClip, wav_duration
+                        existing = sorted((workdir / "audio").glob("audio_*.wav"))
+                        clips = [
+                            AudioClip(index=i + 1, path=p, duration_sec=wav_duration(p), text="")
+                            for i, p in enumerate(existing)
+                        ]
+                    chapters = build_chapters(plan, clips)
+                    desc = format_youtube_description(plan, chapters)
+                    write_chapters(chapters, workdir / "chapters.txt", description=desc)
+                    (workdir / "youtube_description.txt").write_text(desc, encoding="utf-8")
 
-            video_path = workdir / "output_video.mp4"
-            produced = None
-            if resume and video_path.exists() and manifest["stages"].get("video", {}).get("done"):
-                say("      skip (checkpoint)")
-                produced = video_path
-            else:
-                try:
-                    produced = render_video(slides, clips, video_path, chapters=chapters)
-                    manifest["stages"]["video"] = {
-                        "done": True,
-                        "video": produced.name,
-                        "uploaded": False,
-                        "at": _now(),
-                    }
-                except RuntimeError as exc:
-                    result.errors.append(str(exc))
-                    say(f"      WARN: {exc}")
-                    manifest["stages"]["video"] = {
-                        "done": False,
-                        "error": str(exc),
-                        "chapters": "chapters.txt",
-                        "at": _now(),
-                    }
-                _save_manifest(manifest_path, manifest)
+                    video_path = workdir / "output_video.mp4"
+                    produced = None
+                    if resume and video_path.exists() and manifest["stages"].get("video", {}).get("done"):
+                        say("      skip (checkpoint)")
+                        produced = video_path
+                    else:
+                        try:
+                            produced = render_video(slides, clips, video_path, chapters=chapters)
+                            manifest["stages"]["video"] = {
+                                "done": True,
+                                "video": produced.name,
+                                "uploaded": False,
+                                "at": _now(),
+                            }
+                        except RuntimeError as exc:
+                            result.errors.append(str(exc))
+                            say(f"      WARN: {exc}")
+                            manifest["stages"]["video"] = {
+                                "done": False,
+                                "error": str(exc),
+                                "chapters": "chapters.txt",
+                                "at": _now(),
+                            }
+                        _save_manifest(manifest_path, manifest)
 
-            write_video_manifest(workdir, slides=slides, clips=clips, chapters=chapters, video_path=produced)
+                    write_video_manifest(workdir, slides=slides, clips=clips, chapters=chapters, video_path=produced)
 
-            if upload and produced and produced.exists():
-                say("      upload → YouTube (unlisted)")
-                url = upload_youtube(
-                    produced,
-                    title=plan.paper_title or workdir.name,
-                    description=desc,
-                    privacy="unlisted",
-                )
-                if url:
-                    manifest["stages"]["video"]["uploaded"] = True
-                    manifest["stages"]["video"]["youtube_url"] = url
-                    (workdir / "youtube_url.txt").write_text(url + "\n", encoding="utf-8")
-                    say(f"      uploaded: {url}")
-                else:
-                    result.errors.append("YouTube upload skipped (youtubeuploader not available)")
-                _save_manifest(manifest_path, manifest)
+                    if upload and produced and produced.exists():
+                        say("      upload → YouTube (unlisted)")
+                        url = upload_youtube(
+                            produced,
+                            title=plan.paper_title or workdir.name,
+                            description=desc,
+                            privacy="unlisted",
+                        )
+                        if url:
+                            manifest["stages"]["video"]["uploaded"] = True
+                            manifest["stages"]["video"]["youtube_url"] = url
+                            (workdir / "youtube_url.txt").write_text(url + "\n", encoding="utf-8")
+                            say(f"      uploaded: {url}")
+                        else:
+                            result.errors.append("YouTube upload skipped (youtubeuploader not available)")
+                        _save_manifest(manifest_path, manifest)
+
+            except Exception as exc:
+                # Prior completed stages keep done=True for resume; this stage is
+                # explicitly marked failed so the manifest is unambiguous.
+                _fail_stage(stage_name, exc)
+                break
 
     except Exception as exc:
         result.ok = False
         result.errors.append(f"{exc}")
-        manifest["last_error"] = {"error": str(exc), "trace": traceback.format_exc()[-2000:], "at": _now()}
+        manifest["last_error"] = {"stage": manifest.get("failed_stage"), "error": str(exc), "trace": traceback.format_exc()[-2000:], "at": _now()}
         _save_manifest(manifest_path, manifest)
         say(f"ERROR: {exc}")
 

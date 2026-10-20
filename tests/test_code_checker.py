@@ -7,6 +7,7 @@ from paper2youtube.code_checker import (
     inspect_repo,
     looks_like_placeholder,
     parse_github_repo,
+    path_basename,
     _spoken,
 )
 
@@ -101,3 +102,8 @@ def test_code_status_to_md_roundtrip_dict():
     d = status.to_dict()
     assert d["summary"] == "real_code"
     assert "Code availability" in code_status_to_md(status)
+
+
+def test_path_basename():
+    assert path_basename("models/net.py") == "net.py"
+    assert path_basename("requirements.txt") == "requirements.txt"

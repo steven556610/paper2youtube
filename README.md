@@ -15,18 +15,20 @@
 ## 快速開始
 
 ```bash
-# 依賴（一次）
-pip install -r requirements.txt
+# 安裝為 Python package（建議 editable）
+pip install -e ".[dev]"
+
 # 影片 / mp3 需要系統 ffmpeg（conda-forge 亦可）
 #   conda install -c conda-forge ffmpeg
-#   或安裝發行版套件
 
-# 文獻輸出放在 literature/
-python3 run.py --input literature/
+# 三種等價呼叫方式
+paper2youtube --input literature/
+python -m paper2youtube --input literature/
+python3 run.py --input literature/          # 相容舊指令
 
 # 或直接餵 arXiv / PDF
-python3 run.py --input https://arxiv.org/abs/2510.05096 --workdir literature/2510.05096
-python3 run.py --input paper.pdf --workdir literature/mypaper
+paper2youtube --input https://arxiv.org/abs/2510.05096 --workdir literature/2510.05096
+paper2youtube --input paper.pdf --workdir literature/mypaper
 ```
 
 `--input` 若本身就是資料夾，產物會寫在該資料夾（預設 `--input literature/` → 輸出到 `literature/`）。
@@ -126,10 +128,32 @@ python3 -m pytest tests -q
 
 ---
 
-## 依賴
+## 安裝為 Python package
 
-- Python 3.10+（`openai`, `pillow`, `python-pptx`, `PyMuPDF`, `edge-tts`, `pytest`…）
+```bash
+pip install -e ".[dev]"     # 開發（含 pytest + edge-tts）
+pip install -e ".[tts]"     # 執行期 + edge-tts
+pip install .               # 一般安裝
+```
+
+安裝後提供 console script：
+
+```text
+paper2youtube = paper2youtube.cli:main
+```
+
+亦可 `python -m paper2youtube`。API：
+
+```python
+from paper2youtube import run_pipeline, load_settings
+result = run_pipeline("literature/", "literature/", load_settings(), offline=True)
+```
+
+### 依賴
+
+- Python 3.10+（見 `pyproject.toml`）
 - 系統 `ffmpeg` / `ffprobe`（輸出 mp3 與 mp4）
+- 可選 extras：`tts` / `dev` / `all`
 - 可選：`youtubeuploader`（porjo）做 unlisted 上傳
 
 缺依賴時會誠實降級（例如無 ffmpeg → 仍產 PNG/WAV/chapters，並在 manifest 標示 video 未完成）。
@@ -169,4 +193,4 @@ python3 -m pytest tests -q
 
 ## License
 
-依專案所有者政策另行補充。第三方工具（edge-tts、ffmpeg、YouTube uploader）請遵守各專案授權。
+MIT（與 `pyproject.toml` 一致）。第三方工具（edge-tts、ffmpeg、YouTube uploader）請遵守各專案授權。

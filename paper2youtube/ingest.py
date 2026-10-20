@@ -202,8 +202,6 @@ def ingest_pdf(pdf_path: Path, workdir: Path) -> PaperBundle:
     md_path = src_dir / "paper.md"
     md_path.write_text(markdown, encoding="utf-8")
 
-    code_urls = list(dict.fromkeys(GITHUB_RE.findall(full_text)))
-    # findall with groups returns tuples — fix
     code_urls = list(dict.fromkeys(m.group(0).rstrip(".,;)") for m in GITHUB_RE.finditer(full_text)))
 
     return PaperBundle(

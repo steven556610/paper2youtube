@@ -295,21 +295,38 @@ def render_notes(plan: SlidesPlan, bundle: PaperBundle, code_status: CodeStatus)
     return "\n".join(lines)
 
 
+def render_notes_from_plan(plan: SlidesPlan) -> str:
+    """Plan-only notes fallback — no synthetic PaperBundle/CodeStatus."""
+    lines = [
+        f"# {plan.paper_title or 'Untitled'}",
+        "",
+    ]
+    if plan.arxiv_id:
+        lines += [f"- **arXiv:** {plan.arxiv_id}", ""]
+    if plan.code_intro:
+        lines += ["## Code availability", "", plan.code_intro, ""]
+    lines += ["## Narrated outline", ""]
+    for i, item in enumerate(plan.items, 1):
+        lines += [f"### {i:02d}. {item.title}", "", item.narration, ""]
+        if item.figure_path:
+            lines += [f"Figure: `{item.figure_path}`", ""]
+        if item.sources:
+            lines.append("Sources: " + "; ".join(s[:120] for s in item.sources[:2]))
+            lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def write_plan(plan: SlidesPlan, workdir: Path) -> tuple[Path, Path]:
+    """Persist slides_plan.json + output_notes.md.
+
+    Prefers `plan.notes_markdown` (filled by `build_plan`); otherwise writes a
+    plan-only outline. Callers that need full digest notes should run
+    `build_plan` / `render_notes` first so `notes_markdown` is populated.
+    """
     workdir = Path(workdir)
     plan_path = workdir / "slides_plan.json"
     notes_path = workdir / "output_notes.md"
     plan_path.write_text(plan.to_json(), encoding="utf-8")
-    notes_path.write_text(plan.notes_markdown or render_notes(plan, PaperBundle(
-        arxiv_id=plan.arxiv_id,
-        title=plan.paper_title,
-        abstract="",
-        markdown="",
-        tex_sources=[],
-        figures=[],
-        code_urls=[],
-        source_dir=workdir / "source",
-        workdir=workdir,
-        source_kind="text",
-    ), CodeStatus(spoken_intro=plan.code_intro)), encoding="utf-8")
+    notes = plan.notes_markdown or render_notes_from_plan(plan)
+    notes_path.write_text(notes, encoding="utf-8")
     return plan_path, notes_path

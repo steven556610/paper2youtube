@@ -90,9 +90,51 @@ def test_pipeline_resume_skips(tmp_path):
 
 
 def test_cli_parser():
-    from run import build_parser
+    from paper2youtube.cli import build_parser
 
     p = build_parser()
     args = p.parse_args(["--input", "literature/", "--offline"])
     assert args.input == "literature/"
     assert args.offline is True
+
+
+def test_cli_main_offline_smoke(tmp_path, capsys):
+    from paper2youtube.cli import main
+
+    work = tmp_path / "literature"
+    (work / "source").mkdir(parents=True)
+    (work / "figures").mkdir()
+    (work / "source" / "paper.md").write_text("# T\n\n## Introduction\n\nHi.\n", encoding="utf-8")
+    rc = main(["--input", str(work), "--offline", "--stages", "ingest,code_check,script,slides,tts"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "workdir:" in out
+    assert (work / "slides_plan.json").exists()
+
+
+def test_pipeline_stage_failure_marks_manifest(tmp_path):
+    from paper2youtube.llm import ScriptedLLM
+
+    work = _seed_workdir(tmp_path)
+    llm = ScriptedLLM(replies=[])  # empty → figure JSON falls back, but force slides failure
+
+    class BoomLLM(ScriptedLLM):
+        def chat(self, prompt, **kwargs):
+            raise RuntimeError("llm-down")
+
+    settings = Settings(tts_backend="silent", api_key="test")
+    result = run_pipeline(
+        str(work),
+        work,
+        settings,
+        llm=BoomLLM(),
+        stages=["code_check", "script"],
+        offline=True,
+        progress=lambda m: None,
+    )
+    assert result.ok is False
+    assert result.manifest.get("failed_stage") == "script"
+    assert result.manifest["stages"]["script"]["done"] is False
+    assert "llm-down" in result.manifest["stages"]["script"]["error"]
+    # prior successful stage remains done=True for resume
+    assert result.manifest["stages"]["code_check"]["done"] is True

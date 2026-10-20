@@ -87,14 +87,12 @@ def edge_tts_synth(text: str, out_path: Path, *, voice: str) -> bool:
             if _ffmpeg_available():
                 _mp3_to_wav(tmp, out_path)
                 tmp.unlink(missing_ok=True)
-            else:
-                # keep mp3 but also expose as .wav path name via rename for pipeline simplicity
-                # duration probe may fail — fall back to estimate sidecar
-                shutil.move(str(tmp), str(out_path.with_suffix(".mp3")))
-                write_silent_wav(out_path, estimate_duration(text))
-                # actually we want the real audio: store mp3 next to wav and prefer ffmpeg later
-                return False
-            return out_path.exists()
+                return out_path.exists()
+            # Pipeline contract is one .wav per slide. Without ffmpeg we cannot
+            # convert edge-tts mp3 → wav; drop the mp3 and let the caller write
+            # a silent WAV fallback (do not leave mixed .mp3/.wav pairs).
+            tmp.unlink(missing_ok=True)
+            return False
         except Exception:
             return False
 

@@ -159,7 +159,7 @@ def inspect_repo(url: str, *, token: str | None = None, timeout: float = 20.0) -
         for p in paths
         if any(p.lower().endswith(ext) for ext in CODE_EXTS)
     ]
-    markers = [p for p in paths if Path_name(p).lower() in MARKER_FILES]
+    markers = [p for p in paths if path_basename(p).lower() in MARKER_FILES]
     report.code_files = code_files[:30]
     report.has_code = len(code_files) > 0
     report.has_markers = len(markers) > 0
@@ -167,7 +167,7 @@ def inspect_repo(url: str, *, token: str | None = None, timeout: float = 20.0) -
     return report
 
 
-def Path_name(p: str) -> str:
+def path_basename(p: str) -> str:
     return p.rsplit("/", 1)[-1]
 
 

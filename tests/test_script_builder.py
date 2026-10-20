@@ -5,6 +5,7 @@ from paper2youtube.ingest import Figure, PaperBundle
 from paper2youtube.llm import ScriptedLLM
 from paper2youtube.script_builder import (
     FIXED_SECTIONS,
+    SlideItem,
     SlidesPlan,
     build_plan,
     render_notes,
@@ -83,6 +84,31 @@ def test_write_plan_and_reload(tmp_path):
     reloaded = SlidesPlan.from_json(plan_path)
     assert len(reloaded.items) == len(plan.items)
     assert reloaded.paper_title == "Demo"
+
+
+def test_write_plan_without_notes_uses_plan_only(tmp_path):
+    from paper2youtube.script_builder import render_notes_from_plan
+
+    plan = SlidesPlan(
+        paper_title="Solo",
+        arxiv_id="2510.05096",
+        lang="zh-TW",
+        code_intro="已開源",
+        items=[
+            SlideItem(
+                id="overview_code",
+                kind="fixed",
+                title="Overview & Code",
+                slide_markdown="# t\n- a\n",
+                narration="講稿",
+            )
+        ],
+        notes_markdown="",
+    )
+    notes = render_notes_from_plan(plan)
+    assert "Solo" in notes and "講稿" in notes and "已開源" in notes
+    plan_path, notes_path = write_plan(plan, tmp_path)
+    assert "Narrated outline" in notes_path.read_text(encoding="utf-8")
 
 
 def test_render_notes_contains_sections(tmp_path):

@@ -58,13 +58,14 @@ Workdir rules:
 
 ```bash
 cd "$PAPER2YOUTUBE_ROOT"   # or $HOME/ai_for_research/paper2youtube
-python3 run.py --input literature/
+paper2youtube --input literature/
+# fallbacks: python -m paper2youtube  /  python3 run.py
 ```
 
 Live LLM/TTS (default):
 
 ```bash
-python3 run.py \
+paper2youtube \
   --input https://arxiv.org/abs/2510.05096 \
   --workdir literature/2510.05096
 ```

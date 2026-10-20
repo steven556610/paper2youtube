@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "paper2youtube"
+version = "0.2.0"
+description = "arXiv/PDF → deep technical notes, slides, per-figure spoken audio, and YouTube video"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "steven556610" }]
+keywords = ["arxiv", "slides", "tts", "youtube", "paper", "pipeline"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Multimedia :: Video",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+  "requests>=2.28",
+  "openai>=1.30",
+  "pillow>=10.0",
+  "python-pptx>=0.6.21",
+  "PyYAML>=6.0",
+  "numpy>=1.24",
+  "PyMuPDF>=1.23",
+]
+
+[project.optional-dependencies]
+tts = ["edge-tts>=6.1"]
+dev = ["pytest>=7.4", "edge-tts>=6.1"]
+all = ["edge-tts>=6.1", "pytest>=7.4"]
+
+[project.urls]
+Homepage = "https://github.com/steven556610/paper2youtube"
+Repository = "https://github.com/steven556610/paper2youtube"
+Issues = "https://github.com/steven556610/paper2youtube/issues"
+
+[project.scripts]
+paper2youtube = "paper2youtube.cli:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["paper2youtube*"]
+exclude = ["tests*", "literature*", "skill*"]
+
+[tool.setuptools.package-data]
+paper2youtube = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
