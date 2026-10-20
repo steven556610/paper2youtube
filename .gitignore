@@ -1,0 +1,75 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+.env
+.env.*
+!.env.example
+
+# Test / tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Build
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Pipeline run artifacts (never commit generated literature outputs)
+literature/
+**/literature/
+output_*.mp3
+output_*.mp4
+output_*.wav
+output_*.pptx
+output_notes.md
+slides_plan.json
+manifest.json
+video_timeline.json
+chapters.txt
+youtube_description.txt
+youtube_url.txt
+code_status.json
+code_status.md
+slides/
+audio/
+figures/
+source/
+_seg_*.mp4
+_audio_concat.txt
+_concat.txt
+
+# Keep docs / source code
+!README.md
+!requirements.txt
+!pytest.ini
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Secrets (never commit)
+*.pem
+*.key
+*credentials*
+*secret*
+secrets/
+.env.local
+
+# Logs
+*.log
+logs/
